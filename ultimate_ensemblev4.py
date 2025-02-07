@@ -3,9 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 
-#############################################
-# 1. CBAM Module (Channel and Spatial Attention)
-#############################################
 class ChannelAttention(nn.Module):
     def __init__(self, in_channels, reduction=16):
         super(ChannelAttention, self).__init__()
@@ -51,9 +48,6 @@ class CBAM(nn.Module):
         out = out * self.spatial_attention(out)
         return out
 
-#############################################
-# 2. BaseModel with CBAM-enhanced Feature Extractor
-#############################################
 class BaseModel(nn.Module):
     def __init__(self, num_classes=2):
         super(BaseModel, self).__init__()
@@ -71,7 +65,7 @@ class BaseModel(nn.Module):
         self.layer3 = self._make_layer(64, 128, num_blocks=2)
         self.dropout4 = nn.Dropout(0.5)
         
-        # Insert a CBAM block after the last convolutional layer
+        
         self.cbam = CBAM(128)
         
         self.attention = nn.Sequential(
@@ -84,7 +78,7 @@ class BaseModel(nn.Module):
     
     def _make_layer(self, in_channels, out_channels, num_blocks):
         layers = []
-        # First block with downsampling
+    
         layers.append(EnhancedBlock(self.in_channels, out_channels, stride=2))
         self.in_channels = out_channels
         for _ in range(1, num_blocks):
@@ -100,8 +94,7 @@ class BaseModel(nn.Module):
         x = self.dropout3(x)
         x = self.layer3(x)
         x = self.dropout4(x)
-        
-        # Apply CBAM
+           
         x = self.cbam(x)
         
         att = self.attention(x)
@@ -111,9 +104,7 @@ class BaseModel(nn.Module):
         x = torch.flatten(x, 1)
         return self.fc(x)
 
-#############################################
-# 3. EnhancedBlock (as before)
-#############################################
+
 class EnhancedBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         super(EnhancedBlock, self).__init__()
@@ -122,7 +113,6 @@ class EnhancedBlock(nn.Module):
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
         self.bn2   = nn.BatchNorm2d(out_channels)
         
-        # Residual shortcut
         self.shortcut = nn.Sequential()
         if stride != 1 or in_channels != out_channels:
             self.shortcut = nn.Sequential(
@@ -136,9 +126,6 @@ class EnhancedBlock(nn.Module):
         out += self.shortcut(x)
         return F.relu(out)
 
-#############################################
-# 4. RL-Inspired Ensemble Branch (same as before)
-#############################################
 class EnhancedEnsembleRL(nn.Module):
     def __init__(self, num_classes=2, beta=0.5):
         super(EnhancedEnsembleRL, self).__init__()
@@ -202,30 +189,21 @@ class EnhancedEnsembleRL(nn.Module):
         rl_loss = -torch.mean(torch.sum(self.rl_log_probs, dim=1) * reward)
         return rl_loss
 
-#############################################
-# 5. Specialized Expert Branch (Using EfficientNet-B3)
-#############################################
+
 class SpecializedExpert(nn.Module):
     def __init__(self, num_classes=2):
-        """
-        Uses an EfficientNet-B3 architecture pretrained on ImageNet.
-        The classifier is modified to output predictions for the given number of classes.
-        """
         super(SpecializedExpert, self).__init__()
-        # EfficientNet-B3 is available in torchvision (if using a recent version)
+        
         self.model = models.efficientnet_b3(pretrained=True)
         in_features = self.model.classifier[1].in_features
         self.model.classifier[1] = nn.Linear(in_features, num_classes)
     
     def forward(self, x):
-        # EfficientNet-B3 expects at least 300x300; upsample if necessary.
+        
         if x.size(2) < 300 or x.size(3) < 300:
             x = F.interpolate(x, size=(300, 300), mode='bilinear', align_corners=False)
         return self.model(x)
 
-#############################################
-# 6. Gating Network to Fuse Predictions (Enhanced)
-#############################################
 class GatingNetwork(nn.Module):
     def __init__(self, num_classes=2):
         super(GatingNetwork, self).__init__()
@@ -239,9 +217,6 @@ class GatingNetwork(nn.Module):
     def forward(self, x):
         return self.fc(x)
 
-#############################################
-# 7. Ultimate Ensemble Model V4
-#############################################
 class UltimateEnsembleModelV4(nn.Module):
     def __init__(self, num_classes=2, beta=0.5):
         super(UltimateEnsembleModelV4, self).__init__()

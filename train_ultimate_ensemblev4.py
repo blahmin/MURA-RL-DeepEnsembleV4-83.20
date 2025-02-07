@@ -12,16 +12,12 @@ from datetime import datetime, timedelta
 from tqdm import tqdm
 import numpy as np
 
-# Add parent directory to path (assuming ultimate_ensemblev4.py is there)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 from ultimate_ensemblev4 import UltimateEnsembleModelV4
 
-#############################################
-# 1. Dataset Definition (Same as before)
-#############################################
 class MURADataset(torch.utils.data.Dataset):
     def __init__(self, root_dir, transform=None):
         self.root_dir = root_dir
@@ -55,9 +51,6 @@ class MURADataset(torch.utils.data.Dataset):
             image = self.transform(image)
         return image, label, body_part, img_path
 
-#############################################
-# 2. Helper Functions
-#############################################
 def load_misclassified(file_path):
     misclassified_set = set()
     if os.path.exists(file_path):
@@ -85,9 +78,7 @@ def mixup_data(x, y, alpha=0.4):
 def mixup_criterion(criterion, pred, y_a, y_b, lam):
     return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
 
-#############################################
-# 3. Training and Validation Functions with AMP and Gradient Accumulation
-#############################################
+
 def train_one_epoch(model, train_loader, criterion, optimizer, scheduler, device, epoch_num, rl_loss_weight=0.1, use_mixup=True, accumulation_steps=4):
     model.train()
     running_loss = 0.0
@@ -95,14 +86,14 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scheduler, device
     total = 0
     part_correct = {}
     part_total = {}
-    scaler = torch.cuda.amp.GradScaler()  # for mixed precision
+    scaler = torch.cuda.amp.GradScaler()  
     optimizer.zero_grad(set_to_none=True)
     
     pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Training Epoch {epoch_num}")
     for i, (inputs, labels, body_parts, img_paths) in pbar:
         inputs, labels = inputs.to(device), labels.to(device)
         
-        # Apply mixup augmentation if enabled
+        
         if use_mixup:
             inputs, targets_a, targets_b, lam = mixup_data(inputs, labels)
         with torch.cuda.amp.autocast():
@@ -120,11 +111,11 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scheduler, device
             except ValueError:
                 rl_loss = 0.0 * loss_sup
             loss = loss_sup + rl_loss_weight * rl_loss
-            loss = loss / accumulation_steps  # scale loss for accumulation
+            loss = loss / accumulation_steps  
         
         scaler.scale(loss).backward()
         
-        # Accumulate gradients and update every few steps
+        
         if (i + 1) % accumulation_steps == 0 or (i + 1) == len(train_loader):
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -189,21 +180,19 @@ def validate(model, val_loader, criterion, device):
     part_accuracy = {part: 100 * part_correct[part] / part_total[part] for part in part_total}
     return epoch_loss, epoch_acc, part_accuracy
 
-#############################################
-# 4. Main Training Loop with CosineAnnealingWarmRestarts and Early Stopping
-#############################################
+
 def main():
     start_time = time.time()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    batch_size = 32  # Reduced batch size, but effective batch size increased via accumulation
+    batch_size = 32  
     epochs = 150
     learning_rate = 1e-4
     num_classes = 2
     rl_loss_weight = 0.1
     mixup_enabled = True
-    accumulation_steps = 4  # Adjust to simulate larger batch size
+    accumulation_steps = 4  
 
     train_dir = r"C:\Users\blahm\PycharmProjects\Work\CNNXRAY\data\train"
     val_dir   = r"C:\Users\blahm\PycharmProjects\Work\CNNXRAY\data\valid"
@@ -253,18 +242,6 @@ def main():
     
     model = UltimateEnsembleModelV4(num_classes=num_classes, beta=0.5).to(device)
     
-    # Instead of loading pretrained weights, train the model from scratch.
-    # pretrained_path = os.path.join(os.path.dirname(train_dir), "enhanced_ensemble_best.pth")
-    # if os.path.exists(pretrained_path):
-    #     print("Loading pretrained weights from previous enhanced ensemble...")
-    #     checkpoint = torch.load(pretrained_path, map_location=device)
-    #     if 'model_state_dict' in checkpoint:
-    #         model.rl_ensemble.load_state_dict(checkpoint['model_state_dict'], strict=False)
-    #     else:
-    #         model.rl_ensemble.load_state_dict(checkpoint, strict=False)
-    #     print("Pretrained weights loaded successfully.")
-    # else:
-    #     print("No pretrained weights found, training from scratch.")
     print("Training model from scratch without pretrained weights.")
     
     criterion = nn.CrossEntropyLoss()

@@ -7,19 +7,14 @@ from torchvision import transforms
 from PIL import Image
 from tqdm import tqdm
 from collections import defaultdict
-from sklearn.metrics import cohen_kappa_score  # Import scikit-learn's metric
+from sklearn.metrics import cohen_kappa_score  
 
-# Add parent directory to path (assuming ultimate_ensemblev4.py is in the parent directory)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-# Import the model (make sure the file is named ultimate_ensemblev4.py)
 from ultimate_ensemblev4 import UltimateEnsembleModelV4
 
-#############################################
-# 1. Dataset Definition for Evaluation
-#############################################
 class MURADatasetEval(torch.utils.data.Dataset):
     def __init__(self, root_dir, transform=None):
         self.root_dir = root_dir
@@ -27,7 +22,6 @@ class MURADatasetEval(torch.utils.data.Dataset):
         self.image_paths = []
         self.labels = []
         self.body_parts = []
-        # Assume each subfolder is named starting with "XR_"
         parts = [d for d in os.listdir(root_dir) if d.startswith('XR_')]
         for body_part in parts:
             part_dir = os.path.join(root_dir, body_part)
@@ -36,7 +30,6 @@ class MURADatasetEval(torch.utils.data.Dataset):
                     if file.lower().endswith(('.png', '.jpg', '.jpeg')):
                         full_path = os.path.join(root, file)
                         self.image_paths.append(full_path)
-                        # Set label: assume folder name includes "positive" for abnormal cases
                         label = 1 if 'positive' in root.lower() else 0
                         self.labels.append(label)
                         self.body_parts.append(body_part)
@@ -53,9 +46,7 @@ class MURADatasetEval(torch.utils.data.Dataset):
             image = self.transform(image)
         return image, label, body_part, img_path
 
-#############################################
-# 2. Evaluation Function
-#############################################
+
 def evaluate(model, dataloader, device, criterion=None):
     model.eval()
     total = 0
@@ -63,8 +54,6 @@ def evaluate(model, dataloader, device, criterion=None):
     running_loss = 0.0
     part_correct = defaultdict(int)
     part_total = defaultdict(int)
-    
-    # Lists to accumulate predictions and ground truth labels
     all_preds = []
     all_labels = []
     
@@ -72,7 +61,6 @@ def evaluate(model, dataloader, device, criterion=None):
         for inputs, labels, body_parts, _ in tqdm(dataloader, desc="Evaluating"):
             inputs = inputs.to(device)
             labels = labels.to(device)
-            # Use the first body part as representative in the forward pass.
             outputs, _ = model(inputs, body_parts[0])
             if criterion is not None:
                 loss = criterion(outputs, labels)
@@ -85,11 +73,9 @@ def evaluate(model, dataloader, device, criterion=None):
                 if predicted[i] == labels[i]:
                     part_correct[part] += 1
             
-            # Accumulate predictions and labels for Cohen's Kappa calculation
             all_preds.extend(predicted.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
     
-    # Compute Cohen's Kappa score
     kappa_score = cohen_kappa_score(all_labels, all_preds)
     
     avg_loss = running_loss / len(dataloader) if criterion is not None else None
@@ -97,18 +83,13 @@ def evaluate(model, dataloader, device, criterion=None):
     per_part_acc = {part: 100 * part_correct[part] / part_total[part] for part in part_total}
     return overall_acc, per_part_acc, avg_loss, kappa_score
 
-#############################################
-# 3. Main Evaluation Script
-#############################################
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Evaluating on device: {device}")
 
-    # Set paths for validation data and model checkpoint
     val_dir = r"C:\Users\blahm\PycharmProjects\Work\CNNXRAY\data\valid"
     checkpoint_path = os.path.join(os.path.dirname(val_dir), "ultimate_ensemblev4_best.pth")
 
-    # Define transforms (same as used in training/validation)
     transform = transforms.Compose([
         transforms.Resize((160, 160)),
         transforms.ToTensor(),
@@ -116,11 +97,9 @@ def main():
                              std=[0.229, 0.224, 0.225])
     ])
 
-    # Create evaluation dataset and DataLoader
     val_dataset = MURADatasetEval(val_dir, transform=transform)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=2, pin_memory=True)
 
-    # Initialize the model and load checkpoint
     model = UltimateEnsembleModelV4(num_classes=2, beta=0.5).to(device)
     if os.path.exists(checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -130,7 +109,6 @@ def main():
         print("Checkpoint not found. Exiting.")
         return
 
-    # Optionally define criterion for loss reporting
     criterion = nn.CrossEntropyLoss()
     overall_acc, per_part_acc, avg_loss, kappa_score = evaluate(model, val_loader, device, criterion)
     print(f"Overall Validation Accuracy: {overall_acc:.2f}%")
